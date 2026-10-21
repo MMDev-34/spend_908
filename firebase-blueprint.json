@@ -142,11 +142,6 @@
           "type": "string",
           "description": "Creation timestamp",
           "maxLength": 64
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Last update timestamp",
-          "maxLength": 64
         }
       },
       "required": ["id", "userId", "name", "type"]

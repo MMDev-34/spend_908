@@ -47,6 +47,7 @@ interface AppState extends SpendState {
   addCategory: (category: Omit<Category, "id" | "createdAt">) => Category;
   updateCategory: (id: string, updates: Partial<Omit<Category, "id">>) => void;
   deleteCategory: (id: string, reassignmentCategoryId?: string) => boolean;
+  reorderCategories: (newCategories: Category[]) => void;
 
   // People & Loan actions
   addPerson: (name: string) => Person;
@@ -164,6 +165,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const now = new Date().toISOString();
       const newTx: Transaction = {
         ...txData,
+        isUnwanted: txData.type === "expense" ? Boolean(txData.isUnwanted) : false,
         id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: now,
         updatedAt: now,
@@ -186,7 +188,17 @@ export const useAppStore = create<AppState>((set, get) => {
       syncAndSet((state) => {
         const nextTransactions = state.transactions.map((t) => {
           if (t.id === id) {
-            updatedTx = { ...t, ...updates, updatedAt: now };
+            const nextType = updates.type ?? t.type;
+            const nextIsUnwanted = updates.isUnwanted !== undefined 
+              ? (nextType === "expense" ? Boolean(updates.isUnwanted) : false)
+              : (nextType === "expense" ? Boolean(t.isUnwanted) : false);
+
+            updatedTx = { 
+              ...t, 
+              ...updates, 
+              isUnwanted: nextIsUnwanted,
+              updatedAt: now 
+            };
             return updatedTx;
           }
           return t;
@@ -278,12 +290,22 @@ export const useAppStore = create<AppState>((set, get) => {
 
     // Categories
     addCategory: (catData) => {
+      const trimmedName = (catData.name || "").trim().toLowerCase();
+      const existing = get().categories.find(
+        (c) =>
+          c.name.trim().toLowerCase() === trimmedName &&
+          (c.type === catData.type || c.type === "both" || catData.type === "both")
+      );
+
+      if (existing) {
+        // Return existing category instead of creating a duplicate
+        return existing;
+      }
+
       const newCategory: Category = {
         ...catData,
         id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        userId: auth.currentUser?.uid || "",
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       };
 
       syncAndSet((state) => ({
@@ -291,9 +313,7 @@ export const useAppStore = create<AppState>((set, get) => {
       }));
 
       if (auth.currentUser) {
-        syncCategoryToCloud(newCategory, auth.currentUser.uid).catch((err) => {
-          console.warn("Category cloud sync error on create:", err?.message || err);
-        });
+        syncCategoryToCloud(newCategory, auth.currentUser.uid);
       }
 
       return newCategory;
@@ -313,9 +333,7 @@ export const useAppStore = create<AppState>((set, get) => {
       });
 
       if (auth.currentUser && updatedCat) {
-        syncCategoryToCloud(updatedCat, auth.currentUser.uid).catch((err) => {
-          console.warn("Category cloud sync error on update:", err?.message || err);
-        });
+        syncCategoryToCloud(updatedCat, auth.currentUser.uid);
       }
     },
 
@@ -342,12 +360,16 @@ export const useAppStore = create<AppState>((set, get) => {
       });
 
       if (auth.currentUser) {
-        deleteCategoryFromCloud(id).catch((err) => {
-          console.warn("Category cloud sync error on delete:", err?.message || err);
-        });
+        deleteCategoryFromCloud(id);
       }
 
       return true;
+    },
+
+    reorderCategories: (newCategories) => {
+      syncAndSet(() => ({
+        categories: newCategories,
+      }));
     },
 
     // People

@@ -56,6 +56,7 @@ export function subscribeToUserCloudData(
             date: data.date,
             note: data.note,
             paymentMethod: data.paymentMethod,
+            isUnwanted: Boolean(data.isUnwanted && data.isUnwanted !== "false"),
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
           } as Transaction;
@@ -88,7 +89,6 @@ export function subscribeToUserCloudData(
             type: data.type,
             isDefault: data.isDefault,
             createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
           } as Category;
         });
         listeners.onCategoriesUpdate(cats);
@@ -356,42 +356,14 @@ export async function syncCategoryToCloud(cat: Category, userId: string) {
   const path = `categories/${cat.id}`;
   try {
     const payload = cleanFirestorePayload({
-      id: cat.id,
+      ...cat,
       userId,
-      name: cat.name,
-      type: cat.type,
-      icon: cat.icon || "🏷️",
-      color: cat.color || "#10B981",
-      isDefault: !!cat.isDefault,
-      createdAt: cat.createdAt || new Date().toISOString(),
-      updatedAt: cat.updatedAt || new Date().toISOString(),
     });
     await setDoc(doc(db, "categories", cat.id), payload);
-  } catch (error: any) {
-    if (error?.code === "permission-denied" || String(error).includes("permission")) {
-      try {
-        // Fallback for legacy deployed rules that may restrict 'order' or 'updatedAt' or 'both'
-        const fallbackPayload = cleanFirestorePayload({
-          id: cat.id,
-          userId,
-          name: cat.name,
-          type: cat.type === "both" ? "expense" : cat.type,
-          icon: cat.icon || "🏷️",
-          color: cat.color || "#10B981",
-          isDefault: !!cat.isDefault,
-          createdAt: cat.createdAt || new Date().toISOString(),
-        });
-        await setDoc(doc(db, "categories", cat.id), fallbackPayload);
-        return;
-      } catch (fallbackErr) {
-        handleFirestoreError(fallbackErr, OperationType.WRITE, path);
-        return;
-      }
-    }
+  } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
-
 
 export async function deleteCategoryFromCloud(id: string) {
   const path = `categories/${id}`;

@@ -57,7 +57,7 @@ service cloud.firestore {
 
     function isValidCategory(data) {
       return data.keys().hasAll(['id', 'userId', 'name', 'type']) &&
-        data.keys().hasOnly(['id', 'userId', 'name', 'icon', 'color', 'type', 'isDefault', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'name', 'icon', 'color', 'type', 'isDefault', 'createdAt', 'updatedAt', 'order']) &&
         data.id is string && data.id.size() <= 128 &&
         data.userId == request.auth.uid &&
         data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
@@ -65,8 +65,7 @@ service cloud.firestore {
         (!('icon' in data) || (data.icon is string && data.icon.size() <= 32)) &&
         (!('color' in data) || (data.color is string && data.color.size() <= 32)) &&
         (!('isDefault' in data) || data.isDefault is bool) &&
-        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64)) &&
-        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+        (!('order' in data) || data.order is number);
     }
 
     function isValidPerson(data) {

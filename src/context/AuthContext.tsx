@@ -23,6 +23,10 @@ import {
   DEFAULT_PLANNED_EXPENSES,
   DEFAULT_SETTINGS,
 } from "@/lib/constants";
+import {
+  deduplicateCategoryList,
+  analyzeAndCleanupDuplicateCategories,
+} from "@/utils/categoryDeduplication";
 
 export type CloudSyncStatus = "synced" | "syncing" | "offline";
 
@@ -124,8 +128,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               },
               onCategoriesUpdate: (cloudCats) => {
                 const defaults = DEFAULT_CATEGORIES.filter((c) => c.isDefault);
-                const customOnly = cloudCats.filter((c) => !c.isDefault);
-                useAppStore.setState({ categories: [...defaults, ...customOnly] });
+                const { uniqueList, duplicates } = deduplicateCategoryList([
+                  ...defaults,
+                  ...cloudCats,
+                ]);
+                useAppStore.setState({ categories: uniqueList });
+
+                // If duplicates are detected in cloud categories, trigger background cleanup
+                if (duplicates.length > 0 && currentUser?.uid) {
+                  analyzeAndCleanupDuplicateCategories(currentUser.uid).catch((err) =>
+                    console.warn("Background category cleanup:", err)
+                  );
+                }
               },
               onPeopleUpdate: (cloudPeople) => {
                 useAppStore.setState({ people: cloudPeople });

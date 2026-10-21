@@ -31,14 +31,11 @@ service cloud.firestore {
     // Validators
     function isValidUser(data) {
       return data.keys().hasAll(['id', 'email', 'displayName']) &&
-        data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'phone', 'dateOfBirth', 'gender', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt']) &&
         data.id is string && data.id == request.auth.uid &&
         data.email is string && data.email.size() <= 256 &&
         data.displayName is string && data.displayName.size() <= 128 &&
-        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1048576)) &&
-        (!('phone' in data) || (data.phone is string && data.phone.size() <= 64)) &&
-        (!('dateOfBirth' in data) || (data.dateOfBirth is string && data.dateOfBirth.size() <= 64)) &&
-        (!('gender' in data) || (data.gender is string && data.gender.size() <= 64));
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1024));
     }
 
     function isValidTransaction(data) {
@@ -64,9 +61,7 @@ service cloud.firestore {
         (data.type == 'expense' || data.type == 'income' || data.type == 'both') &&
         (!('icon' in data) || (data.icon is string && data.icon.size() <= 32)) &&
         (!('color' in data) || (data.color is string && data.color.size() <= 32)) &&
-        (!('isDefault' in data) || data.isDefault is bool) &&
-        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64)) &&
-        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+        (!('isDefault' in data) || data.isDefault is bool);
     }
 
     function isValidPerson(data) {
@@ -127,7 +122,7 @@ service cloud.firestore {
 
     function isValidPlanned(data) {
       return data.keys().hasAll(['id', 'userId', 'title', 'amount', 'targetDate', 'categoryId']) &&
-        data.keys().hasOnly(['id', 'userId', 'title', 'amount', 'targetDate', 'categoryId', 'reminderDaysBefore', 'notes', 'note', 'isPaid', 'paidDate', 'paidTransactionId', 'createdAt', 'updatedAt', 'category']) &&
+        data.keys().hasOnly(['id', 'userId', 'title', 'amount', 'targetDate', 'categoryId', 'reminderDaysBefore', 'notes', 'note', 'isPaid', 'paidTransactionId', 'createdAt', 'updatedAt', 'category']) &&
         data.id is string && data.id.size() <= 128 &&
         data.userId == request.auth.uid &&
         data.title is string && data.title.size() <= 128 &&
@@ -138,47 +133,17 @@ service cloud.firestore {
         (!('notes' in data) || (data.notes is string && data.notes.size() <= 512)) &&
         (!('note' in data) || (data.note is string && data.note.size() <= 512)) &&
         (!('isPaid' in data) || data.isPaid is bool) &&
-        (!('paidDate' in data) || (data.paidDate is string && data.paidDate.size() <= 32)) &&
         (!('paidTransactionId' in data) || (data.paidTransactionId is string && data.paidTransactionId.size() <= 128));
     }
 
     function isValidSettings(data) {
       return data.keys().hasAll(['userId', 'currency', 'theme', 'weekStartsOn', 'numberFormat']) &&
-        data.keys().hasOnly([
-          'userId',
-          'currency',
-          'theme',
-          'weekStartsOn',
-          'numberFormat',
-          'overallMonthlyBudget',
-          'hideSensitiveBalances',
-          'confirmBeforeDelete',
-          'showDecimals',
-          'defaultPaymentMethod',
-          'budgetAlertThreshold',
-          'defaultStartRoute',
-          'billAlertDays',
-          'hapticFeedback',
-          'enableUnwantedSpendTracking',
-          'autoBackupReminder',
-          'updatedAt'
-        ]) &&
+        data.keys().hasOnly(['userId', 'currency', 'theme', 'weekStartsOn', 'numberFormat', 'updatedAt']) &&
         data.userId == request.auth.uid &&
         data.currency is string && data.currency.size() <= 16 &&
         (data.theme == 'dark' || data.theme == 'light' || data.theme == 'system') &&
         (data.weekStartsOn == 'monday' || data.weekStartsOn == 'sunday') &&
-        (data.numberFormat == 'comma' || data.numberFormat == 'dot' || data.numberFormat == 'space') &&
-        (!('overallMonthlyBudget' in data) || (data.overallMonthlyBudget is number && data.overallMonthlyBudget >= 0)) &&
-        (!('hideSensitiveBalances' in data) || data.hideSensitiveBalances is bool) &&
-        (!('confirmBeforeDelete' in data) || data.confirmBeforeDelete is bool) &&
-        (!('showDecimals' in data) || data.showDecimals is bool) &&
-        (!('defaultPaymentMethod' in data) || (data.defaultPaymentMethod is string && data.defaultPaymentMethod.size() <= 32)) &&
-        (!('budgetAlertThreshold' in data) || (data.budgetAlertThreshold is number && data.budgetAlertThreshold >= 0 && data.budgetAlertThreshold <= 200)) &&
-        (!('defaultStartRoute' in data) || (data.defaultStartRoute is string && data.defaultStartRoute.size() <= 64)) &&
-        (!('billAlertDays' in data) || (data.billAlertDays is number && data.billAlertDays >= 0 && data.billAlertDays <= 90)) &&
-        (!('hapticFeedback' in data) || data.hapticFeedback is bool) &&
-        (!('enableUnwantedSpendTracking' in data) || data.enableUnwantedSpendTracking is bool) &&
-        (!('autoBackupReminder' in data) || (data.autoBackupReminder is string && data.autoBackupReminder.size() <= 32));
+        (data.numberFormat == 'comma' || data.numberFormat == 'dot' || data.numberFormat == 'space');
     }
 
     // 1. Users Profile Collection (Isolated PII)
@@ -187,7 +152,7 @@ service cloud.firestore {
       allow list: if false;
       allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && incoming().id == existing().id;
-      allow delete: if isOwner(userId) && isValidId(userId);
+      allow delete: if false;
     }
 
     // 2. Transactions Collection
@@ -258,8 +223,8 @@ service cloud.firestore {
       allow get: if isOwner(userId) && isValidId(userId);
       allow list: if false;
       allow create: if isOwner(userId) && isValidId(userId) && isValidSettings(incoming());
-      allow update: if isOwner(userId) && isValidId(userId) && existing().userId == request.auth.uid && incoming().userId == existing().userId && isValidSettings(incoming());
-      allow delete: if isOwner(userId) && isValidId(userId);
+      allow update: if isOwner(userId) && isValidId(userId) && existing().userId == request.auth.uid && incoming().userId == existing().userId && isValidSettings(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['currency', 'theme', 'weekStartsOn', 'numberFormat', 'updatedAt']);
+      allow delete: if false;
     }
 
     // 10. Health check connection probe for testConnection()
@@ -269,4 +234,3 @@ service cloud.firestore {
     }
   }
 }`;
-

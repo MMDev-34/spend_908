@@ -143,13 +143,18 @@ export const WeeklyBarChart: React.FC<WeeklyBarChartProps> = ({ settings }) => {
       </div>
 
       {/* Bar Chart Container */}
-      <div className="pt-1">
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 items-end h-28 sm:h-32 px-0.5">
+      <div className="pt-2">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 items-end h-32 sm:h-36 px-0.5 pt-6">
           {days.map((day, idx) => {
             const isSelected = selectedIndex === idx;
+            // Proportional height scaling:
+            // - True linear ratio proportional to amount (day.total / maxDaySpend)
+            // - Scaled to 82% to leave clean breathing room for the top amount label
+            // - A gentle 4% minimum for non-zero spending so small values remain visible
+            // - Flat 3px baseline for zero-spending days
             const heightPercent = day.total > 0 
-              ? Math.max(12, Math.round((day.total / maxDaySpend) * 80)) 
-              : 6;
+              ? Math.max(4, Math.round((day.total / maxDaySpend) * 82)) 
+              : 0;
 
             return (
               <button
@@ -160,26 +165,30 @@ export const WeeklyBarChart: React.FC<WeeklyBarChartProps> = ({ settings }) => {
                 aria-label={`${day.dayFull}: ${formatMoney(day.total, settings.currency, settings.numberFormat)}`}
               >
                 <div className="w-full flex items-end justify-center h-full relative">
-                  {/* Clean badge above selected or hovered bar with amount */}
+                  {/* Spend money over each bar */}
                   {day.total > 0 && (
                     <span 
                       style={{ bottom: `calc(${heightPercent}% + 4px)` }}
-                      className="absolute left-1/2 -translate-x-1/2 text-[10px] font-mono-num font-bold text-emerald-400 bg-[#1C1C1C]/80 px-1 py-0.5 rounded border border-[#2E2E2E] shadow-lg whitespace-nowrap pointer-events-none z-20"
+                      className={`absolute left-1/2 -translate-x-1/2 text-[9px] sm:text-[10px] font-mono-num font-semibold whitespace-nowrap pointer-events-none z-10 transition-colors ${
+                        isSelected ? "text-emerald-300 font-bold scale-105" : "text-emerald-400/90"
+                      }`}
                     >
                       {formatBarLabel(day.total)}
                     </span>
                   )}
 
                   <div
-                    style={{ height: `${heightPercent}%` }}
+                    style={{ height: day.total === 0 ? "3px" : `${heightPercent}%` }}
                     className={`relative w-full max-w-[20px] sm:max-w-[26px] rounded-t-md transition-all duration-150 ${
                       day.total === 0
-                        ? "bg-[#1E1E1E]"
-                        : "bg-gradient-to-t from-emerald-600 to-emerald-400"
+                        ? "bg-[#222222] border-t border-[#333333] group-hover:bg-[#2A2A2A]"
+                        : "bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400 shadow-sm shadow-emerald-500/25 hover:brightness-110"
                     } ${
                       isSelected
-                        ? "shadow-sm shadow-emerald-500/40 ring-2 ring-emerald-400"
-                        : "shadow-sm shadow-emerald-500/10"
+                        ? "ring-2 ring-white shadow-md shadow-emerald-400/40 scale-y-[1.02]"
+                        : day.isToday
+                        ? "ring-1 ring-emerald-300/60 shadow-md shadow-emerald-500/30"
+                        : ""
                     }`}
                   />
                 </div>

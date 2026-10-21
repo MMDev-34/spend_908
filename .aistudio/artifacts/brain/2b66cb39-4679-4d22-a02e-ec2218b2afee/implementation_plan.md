@@ -1,179 +1,113 @@
-# Profile & Account Information Architecture
+# Single-Line Category Carousel & Mobile Date Picker Fix
 
-A dedicated, layered profile and account security management architecture for Spend Vault, translating the provided mobile-first reference flow into full-featured, responsive views for managing personal identity, credentials, and account settings.
+Streamline the New Transaction popup by converting the category selector into a single-line, icon-only horizontal scroll carousel and replacing the squished native date input with a clearly formatted, mobile-friendly date selector and calendar popover.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following product decisions were confirmed during the Phase 1 clarification interview and govern the technical and visual implementation:
+> The following user preferences were confirmed during the interactive interview:
 
-- **Confirmed Decision 1 (Navigation Structure)**: Dedicated sub-routes (`/profile` and `/account-settings`) rather than constrained popups. Both desktop and mobile navigation (top bar avatar, sidebar profile card, and settings menu) will link directly to these sub-routes with persistent back-navigation.
-- **Confirmed Decision 2 (Profile Field Scope)**: Full editable personal identity suite including **Full Name**, **Avatar / Profile Picture**, **Phone Number**, **Date of Birth**, and **Gender**, with inline edit modes and instant validation.
-- **Confirmed Decision 3 (Account Security Scope)**: Dedicated Account Settings view featuring **Login Email**, **Password Change & Password Reset Email trigger**, and **Account Deletion** with double-confirmation dialog and credential verification.
-- **Recommended Default (Settings Hub & Shortcuts)**: The Settings page (`/settings`) will feature top-level entry cards for **Profile** (showing avatar, name, and "View profile >") and **Account Settings**, matching the middle and bottom screens in the reference diagram, with cross-links between Profile and Account Settings.
+- **Category Label Location**: The selected category name will be shown directly beside the Category header (e.g., `Category · Food 🍔`), keeping the carousel row pure icon-only, clean, and uncluttered.
+- **Category Carousel**: Single-line horizontal scroll container with smooth touch scrolling (`overflow-x-auto`), circular/rounded-xl icon buttons, active colored indicator rings, and full 44px touch targets.
+- **Date Selector Display**: Formatted clearly as `20 Oct` (with `Today` badge or prefix), ensuring high legibility on small mobile viewports (375px–430px) without cramped native browser controls or truncated text (`20 - 1📅`).
+- **Date Picker Interaction**: Tapping the formatted date button opens a clean calendar popover for easy day selection, accompanied by quick `<` and `>` day stepper arrows.
 
 ---
 
 ## 1. Overview & Core Concept
 
-### What It Does
-Provides users with a structured, intuitive two-tier management center:
-1. **Profile Screen (`/profile`)**: Focuses on personal identity and presentation. Displays the user's avatar (with an "Add / Change image" trigger), full name, date of birth, phone number, and gender. Includes a direct "Account settings" shortcut card at the bottom as shown in the design reference.
-2. **Account Settings Screen (`/account-settings`)**: Focuses on authentication, security, and credentials. Enables users to view and update their login email address, trigger a password reset link or update password, toggle two-factor/security preferences, review connected session details, and safely delete their account.
-3. **Settings Hub (`/settings`) Integration**: Upgrades the existing Settings page into a clean gateway matching the reference diagram's middle screen, featuring a prominent top Profile preview banner ("View profile >"), navigation list items ("Account settings >", "Appearance >", "Currency & Number Format >", "Help & Support >"), and a red "Log out" button.
-
-### Target Audience & Persona
-All Spend Vault personal finance users who want transparency over their account credentials, identity customization, and quick access to account recovery tools.
-
-### Key Value
-- Replaces disjointed modal popups with dedicated, accessible, deep-linkable URLs.
-- Matches the mobile-first UX standard shown in the user's design reference with 44px+ touch targets and thumb-friendly ergonomics.
-- Prevents accidental credential changes with dedicated confirmation modals and state feedback.
+- **The Problem**: 
+  - The previous 4-column category grid pushed essential form controls down the mobile screen, requiring excessive vertical scrolling.
+  - The date field used an unstyled native WebKit `<input type="date">` inside a narrow flex container, causing mobile browsers to squish and truncate the text into `< 20 - 1📅 >`.
+- **The Solution**:
+  - Transform categories into an ergonomic single-line horizontal scroller displaying icon-only circular tokens with active highlight rings.
+  - Display the selected category name dynamically next to the heading (`Category · Food`).
+  - Replace the compressed native date input with a custom responsive date control that displays `Today, 20 Oct` (or `20 Oct`) and opens an accessible calendar popover when tapped, with working left/right day steppers.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Key User Flows
+### A. Layout Architecture & Component Hierarchy
 
 ```
-[ Menu / Top Bar / Sidebar ]
-          │
-          ├──▶ [ Settings Hub (/settings) ]
-          │          │
-          │          ├──▶ [ Profile Header Card ] ──▶ [ Profile (/profile) ]
-          │          │                                      │
-          │          └──▶ [ Account Settings Row ] ─┐      └──▶ [ "Account settings" CTA ]
-          │                                         │                     │
-          ▼                                         ▼                     ▼
-[ Top Avatar Click ] ──────────────────────▶ [ Account Settings (/account-settings) ]
+┌────────────────────────────────────────────────────────┐
+│ New Transaction Popup                                 │
+├────────────────────────────────────────────────────────┤
+│ [ Expense ] [ Income ]  <-- Segmented Type Toggle      │
+│                                                        │
+│ Amount: [ ₹ 0.00 ]      [+50] [+100] [+200] [+500]     │
+│                                                        │
+│ Category · Food                                        │
+│ ┌────────────────────────────────────────────────────┐ │
+│ │ (🍔) (🚌) (🛍️) (🧾) (🏠) (💊) (🎬) (💰) (📦) ...   │ │ <-- 1-line icon scroll
+│ └────────────────────────────────────────────────────┘ │
+│                                                        │
+│ Date & Method:                                         │
+│ ┌───────────────────────────┐ ┌─────────┐ ┌──────────┐ │
+│ │ ‹  Today, 20 Oct 📅  ›    │ │ [ UPI ] │ │ Unwanted │ │
+│ └───────────────────────────┘ └─────────┘ └──────────┘ │
+│       │ (tap opens calendar popover)                   │
+│       ▼                                                │
+│ ┌───────────────────────────┐                          │
+│ │   October 2026            │                          │
+│ │   Mo Tu We Th Fr Sa Su    │                          │
+│ │    1  2  3  4  5  6  7    │                          │
+│ │   ... 19 [20]             │                          │
+│ └───────────────────────────┘                          │
+│                                                        │
+│ [ Add Transaction ]                                    │
+└────────────────────────────────────────────────────────┘
 ```
 
-1. **Viewing & Editing Profile (`/profile`)**:
-   - Header with back arrow (`←`) returning to the previous screen (`/settings` or previous route) and "Profile" title.
-   - Large centered avatar with an "Add image / Change" button. Users can upload an image URL or pick curated finance avatars.
-   - List of personal fields with clean right-aligned pencil edit icons (`Edit2`):
-     - **Name**: Display name with validation.
-     - **Date of Birth**: Native date picker (`YYYY-MM-DD`).
-     - **Phone Number**: International phone format with country code input.
-     - **Gender**: Selectable options (`Male`, `Female`, `Non-binary`, `Prefer not to say`).
-   - Bottom shortcut card: "Account settings — A shortcut link to change login, password" with chevron `→`.
+### B. Category Scroller Specifications
+- **Container**: `flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5 scroll-smooth snap-x`.
+- **Icon Buttons**:
+  - Size: 44x44px touch target with `rounded-2xl` geometry.
+  - Inactive State: Dark neutral surface (`bg-[#1C1C1C] border border-[#2A2A2A] text-[#A1A1AA] hover:border-[#383838]`).
+  - Active State: Category brand color tint (`bg-opacity-20 border-opacity-100 ring-2 ring-emerald-500/50 shadow-md scale-105 transition-all`).
+  - Emoji/Icon display: Centered 20px icon.
+- **Header Line**:
+  - `Category` label on the left in subtle uppercase neutral (`text-xs text-[#A1A1AA]`).
+  - Selected category badge on the right: `· Food 🍔` in high-contrast text (`text-[#F5F5F5] font-semibold`).
 
-2. **Managing Security & Credentials (`/account-settings`)**:
-   - Header with back arrow (`←`) and "Account settings" title.
-   - **Login Email**: Current email with verification badge ("Verified" in green or "Unverified" with resend link) and edit dialog.
-   - **Password**: Masked `••••••••••••` with "Change password" button that triggers either in-app change or a Firebase reset link to the user's email.
-   - **Connected Device & Session Info**: Clean display of current platform, browser, and last active timestamp.
-   - **Delete Account**: Red destructive row at the bottom opening a confirmation modal requiring typed confirmation before deletion.
-
-### Visual Identity & Theme
-- **Color Discipline (60-30-10)**:
-  - 60% Canvas: Deep `#0A0A0A` neutral dark background.
-  - 30% Structural Surfaces: `#141414` card containers with `#262626` hairline borders and subtle hover states (`#1C1C1C`).
-  - 10% Accents: Emerald `#10B981` for verified states and active toggles; Rose `#F43F5E` for destructive delete triggers.
-- **Typography**: Clean tabular figures for phone numbers and dates; standard font weights (`font-semibold` titles, `font-medium` values, `text-neutral-400` labels).
-- **Anti-Slop Discipline**: Zero unnecessary pill badges; clean text metadata separated by subtle spacing; no fake compiler/status indicators.
+### C. Date Selector Specifications
+- **Trigger Element**:
+  - Dedicated container with stepper controls: `< button [ChevronLeft]`, formatted label `20 Oct` with calendar icon, `button [ChevronRight] >`.
+  - Date text styled with tabular figures (`font-mono-num font-semibold text-xs sm:text-sm text-[#F5F5F5] whitespace-nowrap`).
+  - Clicking the center date label triggers the calendar dropdown/modal.
+- **Calendar Popover**:
+  - Clean floating modal or anchored dropdown with month navigation, weekday headers, and tap-to-select day grid.
+  - Highlights today and currently selected date.
+  - Enforces max date boundary (cannot select future dates unless allowed for recurring/future plans).
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Sub-Route Navigation vs. Multi-Step Modal**:
-  - *Chosen Approach*: Sub-routes `/profile` and `/account-settings` integrated into `RouterProvider`.
-  - *Why*: Allows browser history (`popstate`, back button), mobile swipe gestures, bookmarkable URLs, and matches standard responsive web app architectures without trapped modal scroll issues.
-  - *Alternatives Considered*: Slide-over sheets or drawer modals were considered, but nested modals (e.g. edit dialog on top of profile modal) degrade on small mobile screens.
-- **Profile Data Persistence**:
-  - *Chosen Approach*: Store profile extensions (`phone`, `dateOfBirth`, `gender`, `avatarUrl`) in `users/{userId}` Firestore document and local storage cache, while syncing `displayName` and `photoURL` directly to Firebase Auth profile.
-  - *Why*: Guarantees instant offline availability and cross-device synchronization without breaking existing Firestore security rules.
-- **Password & Email Security Flows**:
-  - *Chosen Approach*: Use Firebase Authentication standard `sendPasswordResetEmail` and `verifyBeforeUpdateEmail` with in-app status toasts and re-authentication safeguards.
-  - *Why*: Ensures military-grade security without exposing plain passwords or bypassing Firebase security protocols.
+- **Decision 1: Icon-Only Single-Line Scroller vs. Multi-Line Grid**
+  - *Chosen Approach*: Horizontal single-line scroller with 44px icon tokens and the category name reflected in the section header.
+  - *Why*: Frees up over 120px of vertical screen space on mobile devices, ensuring the amount input, date, payment method, and submit button all fit comfortably in the primary thumb zone without vertical scrolling.
+- **Decision 2: Formatted Date Button with Calendar Popover vs. Native `<input type="date">`**
+  - *Chosen Approach*: Custom date trigger button displaying human-readable `Today, 20 Oct` backed by our existing interactive calendar selector.
+  - *Why*: Eliminates browser-specific WebKit rendering bugs where narrow widths cause text truncation (`20 - 1📅`), guarantees consistent dark-theme styling, and provides effortless day-to-day stepping.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+## 4. Technical Architecture & Implementation Steps
 
-### System Architecture Diagram
+### Step 1: Update Category Selection in `AddTransactionModal.tsx`
+- Refactor the Category section markup:
+  - Header: Render `Category` with dynamic active category title: `Category · {selectedCategory?.name || "Select"}`.
+  - Body: Replace `grid grid-cols-4` with `flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth`.
+  - Buttons: Render compact icon buttons with category tooltip/aria-label and smooth active animations.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          Navigation Entry Points                       │
-│     TopBar (Avatar)  │  Sidebar (Profile Card)  │  BottomNav (Settings)│
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       Client Router (router.tsx)                       │
-│    RoutePath: "/" | "/transactions" | "/settings" | "/profile" |       │
-│               "/account-settings" | "/plans" | "/overview"             │
-└───────────────┬───────────────────────────────────────┬────────────────┘
-                │                                       │
-                ▼                                       ▼
-┌───────────────────────────────┐       ┌────────────────────────────────┐
-│      ProfilePage.tsx          │       │    AccountSettingsPage.tsx     │
-│  - Avatar picker / uploader   │       │  - Login email & verification  │
-│  - Name, DOB, Phone, Gender   │       │  - Password reset / change     │
-│  - Shortcut to AccountSettings│       │  - Connected session info      │
-│  - Inline edit state handlers │       │  - Delete account modal flow   │
-└───────────────┬───────────────┘       └───────────────┬────────────────┘
-                │                                       │
-                ▼                                       ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                     AuthContext & User Profile Store                   │
-│   - Firebase Auth (user, updateProfile, sendPasswordReset, deleteUser) │
-│   - Firestore `users/{userId}` profile synchronization                 │
-│   - LocalStorage backup `spend_profile_{userId}`                       │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Step 2: Implement Responsive Date Selector with Calendar Popover
+- Replace the squeezed `<input type="date">` container with a custom responsive date component:
+  - Formatted label: e.g. `formatDateButtonLabel(date)` -> `"Today, 20 Oct"` on desktop, `"20 Oct"` on very narrow screens.
+  - Left & Right stepper buttons (`-1 day`, `+1 day` up to today).
+  - Popover calendar integration: Leverage the tested popover calendar logic from `DateSelector.tsx` or a lightweight anchored calendar popup so users can tap and pick any date.
 
-### Component & File Blueprint
-
-1. **`src/app/router.tsx`**:
-   - Add `"/profile"` and `"/account-settings"` to `RoutePath` union and URL path/hash parser.
-2. **`src/types/user.ts`**:
-   - Define `UserProfileData` interface:
-     ```ts
-     export interface UserProfileData {
-       displayName: string;
-       email: string;
-       phone?: string;
-       dateOfBirth?: string;
-       gender?: "male" | "female" | "other" | "prefer_not_to_say" | "";
-       photoURL?: string;
-     }
-     ```
-3. **`src/pages/Profile/ProfilePage.tsx`**:
-   - Implements Screen 3 ("Profile") from the reference diagram:
-     - Header with back button to previous view.
-     - Avatar circle with "Add image" button.
-     - Form rows with field name, formatted value, and `Edit2` trigger.
-     - Inline modal / sheet to edit fields with instant save.
-     - Bottom banner: "Account settings — A shortcut link to change login, password".
-4. **`src/pages/AccountSettings/AccountSettingsPage.tsx`**:
-   - Implements Screen 5 ("Account settings") from the reference diagram:
-     - Header with back button.
-     - Login email row with edit / verification badge.
-     - Password row with "Change" button (sends password reset link or opens password update dialog).
-     - Connected session / device information.
-     - Destructive "Delete my account" trigger with safety confirm dialog.
-5. **`src/pages/Settings/SettingsPage.tsx`**:
-   - Upgrades top section to include the Profile card banner ("Joh Alex, View profile >") matching Screen 4 of the reference diagram.
-   - Provides quick link item for "Account settings >" and "Profile >".
-6. **`src/components/navigation/TopBar.tsx` & `src/components/navigation/Sidebar.tsx`**:
-   - Clicking avatar or profile card navigates to `/profile` instead of opening the legacy basic popup.
-7. **`src/App.tsx`**:
-   - Mount `<ProfilePage />` on route `"/profile"` and `<AccountSettingsPage />` on route `"/account-settings"`.
-
----
-
-## 5. Verification & Rollout Plan
-
-1. **Compilation & Type Check**:
-   - Verify all TypeScript types and imports compile cleanly using `compile_applet` and `lint_applet`.
-2. **Interactive Testing Across Flows**:
-   - Test navigation: Home -> Settings -> Profile -> Account Settings -> Back navigation.
-   - Test direct avatar click from TopBar and Sidebar.
-   - Test editing Name, Phone, Date of Birth, and Gender; confirm changes persist on reload.
-   - Test Password Reset email trigger and verify toast feedback.
-   - Test Delete Account confirmation modal safeguard.
-   - Verify mobile responsive display ($375\text{px}$) and desktop presence ($1440\text{px}$).
+### Step 3: Verification & Polish
+- Validate touch responsiveness and layout integrity across standard mobile viewport widths (375px, 390px, 412px, 430px) as well as desktop viewports.
+- Run `compile_applet` and `lint_applet` to ensure zero compilation or type errors.
