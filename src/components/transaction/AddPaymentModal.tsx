@@ -15,7 +15,8 @@ import {
   Smartphone,
   Banknote,
   MoreHorizontal,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  User
 } from "lucide-react";
 
 interface DateOption {
@@ -44,12 +45,17 @@ export const AddPaymentModal: React.FC = () => {
   const settings = useAppStore((s) => s.settings);
   const addTransaction = useAppStore((s) => s.addTransaction);
   const updateTransaction = useAppStore((s) => s.updateTransaction);
+  const people = useAppStore((s) => s.people);
+  const addPerson = useAppStore((s) => s.addPerson);
+  const addLoan = useAppStore((s) => s.addLoan);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [amountStr, setAmountStr] = useState<string>("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [date, setDate] = useState<string>(getToday());
   const [description, setDescription] = useState<string>("");
+  const [transferTo, setTransferTo] = useState<string>("");
+  const [showPersonSuggestions, setShowPersonSuggestions] = useState<boolean>(false);
   const [paymentAccount, setPaymentAccount] = useState<string>("upi");
   const [error, setError] = useState<string>("");
 
@@ -66,6 +72,7 @@ export const AddPaymentModal: React.FC = () => {
   const amountInputRef = useRef<HTMLInputElement>(null);
   const categoryMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const transferToRef = useRef<HTMLDivElement>(null);
 
   // Normalize payment method to one of the 5 requested types
   const normalizePaymentAccount = (acc?: string): string => {
@@ -108,26 +115,46 @@ export const AddPaymentModal: React.FC = () => {
   // Sync state when opening modal
   useEffect(() => {
     if (isAddModalOpen) {
+      const targetType = (prefill ? (prefill.tag === "transfer" ? "transfer" : prefill.type) : initialType) || "expense";
+      const transferCat = categories.find((c) => c.id === "cat-transfer" || c.name.toLowerCase() === "transfer");
+
       if (prefill) {
-        setType(prefill.type || initialType || "expense");
+        setType(targetType);
         setAmountStr(prefill.amount ? (prefill.amount / 100).toString() : "");
-        setSelectedCategoryId(prefill.categoryId || "");
+        if (targetType === "transfer") {
+          setSelectedCategoryId(transferCat?.id || "cat-transfer");
+        } else {
+          setSelectedCategoryId(prefill.categoryId || "");
+        }
         setDate(prefill.date || getToday());
-        setDescription(prefill.note || "");
+        const toMatch = prefill.note?.match(/\(To:\s*(.*?)\)/);
+        if (toMatch && toMatch[1]) {
+          setTransferTo(toMatch[1].trim());
+          setDescription(prefill.note?.replace(/\(To:\s*.*?\)/, "").trim() || "");
+        } else {
+          setDescription(prefill.note || "");
+          setTransferTo("");
+        }
         setPaymentAccount(normalizePaymentAccount(prefill.paymentMethod || settings.defaultPaymentMethod));
       } else {
-        setType(initialType || "expense");
+        setType(targetType);
         setAmountStr("");
         setDate(getToday());
         setDescription("");
+        setTransferTo("");
         setPaymentAccount(normalizePaymentAccount(settings.defaultPaymentMethod));
 
-        const filtered = categories.filter((c) => c.type === (initialType || "expense") || c.type === "both");
-        setSelectedCategoryId(filtered[0]?.id || "");
+        if (targetType === "transfer") {
+          setSelectedCategoryId(transferCat?.id || "cat-transfer");
+        } else {
+          const filtered = categories.filter((c) => (c.type === targetType || c.type === "both") && c.name.toLowerCase() !== "transfer");
+          setSelectedCategoryId(filtered[0]?.id || "");
+        }
       }
       setError("");
       setShowCategoryMenu(false);
       setShowAccountMenu(false);
+      setShowPersonSuggestions(false);
       setShowCalendarModal(false);
 
       // Initialize calendar view date
@@ -182,6 +209,9 @@ export const AddPaymentModal: React.FC = () => {
       if (accountMenuRef.current && !accountMenuRef.current.contains(target)) {
         setShowAccountMenu(false);
       }
+      if (transferToRef.current && !transferToRef.current.contains(target)) {
+        setShowPersonSuggestions(false);
+      }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -209,11 +239,23 @@ export const AddPaymentModal: React.FC = () => {
   if (!isAddModalOpen) return null;
 
   // Selected Category Object
-  const selectedCategory = categories.find((c) => c.id === selectedCategoryId) || categories[0] || {
-    id: "default",
-    name: "Food & Dining",
-    icon: "🍔",
+  const defaultTransferCat = categories.find((c) => c.id === "cat-transfer" || c.name.toLowerCase() === "transfer") || {
+    id: "cat-transfer",
+    name: "Transfer",
+    icon: "🔄",
+    color: "#0EA5E9",
+    type: "both" as const,
+    isDefault: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
   };
+
+  const selectedCategory = type === "transfer"
+    ? (categories.find((c) => c.id === selectedCategoryId) || defaultTransferCat)
+    : (categories.find((c) => c.id === selectedCategoryId) || categories[0] || {
+        id: "default",
+        name: "Food & Dining",
+        icon: "🍔",
+      });
 
   // Payment method accounts: strictly the 5 requested options with no extraneous text
   const paymentAccounts = [
@@ -282,26 +324,84 @@ export const AddPaymentModal: React.FC = () => {
       return;
     }
 
-    if (prefill && prefill.id) {
-      updateTransaction(prefill.id, {
-        type,
+    if (type === "transfer") {
+      const recipientName = transferTo.trim();
+      if (!recipientName) {
+        setError("Please enter who you are transferring to");
+        return;
+      }
+
+      // Find or create person contact
+      let targetPerson = people.find(
+        (p) => p.name.toLowerCase() === recipientName.toLowerCase()
+      );
+      if (!targetPerson) {
+        targetPerson = addPerson(recipientName);
+      }
+
+      // Automatically create a 'lent' loan record for Borrow & Lend ledger
+      addLoan({
+        personId: targetPerson.id,
+        direction: "lent",
         amount: minorUnits,
-        categoryId: selectedCategoryId || categories[0]?.id || "general",
+        description: description.trim() || `Transfer to ${targetPerson.name}`,
         date,
-        note: description.trim() || undefined,
-        paymentMethod: paymentAccount,
       });
-      showToast("Transaction updated");
+
+      // Record transfer transaction
+      const noteText = description.trim()
+        ? `${description.trim()} (To: ${targetPerson.name})`
+        : `Transfer to ${targetPerson.name}`;
+
+      const transferCatId = defaultTransferCat.id;
+
+      if (prefill && prefill.id) {
+        updateTransaction(prefill.id, {
+          type: "expense",
+          tag: "transfer",
+          amount: minorUnits,
+          categoryId: transferCatId,
+          date,
+          note: noteText,
+          paymentMethod: paymentAccount,
+        });
+        showToast(`Transfer updated & logged as lent to ${targetPerson.name}`);
+      } else {
+        addTransaction({
+          type: "expense",
+          tag: "transfer",
+          amount: minorUnits,
+          categoryId: transferCatId,
+          date,
+          note: noteText,
+          paymentMethod: paymentAccount,
+        });
+        showToast(`Transfer to ${targetPerson.name} recorded & added to Lent`);
+      }
     } else {
-      addTransaction({
-        type,
-        amount: minorUnits,
-        categoryId: selectedCategoryId || categories[0]?.id || "general",
-        date,
-        note: description.trim() || undefined,
-        paymentMethod: paymentAccount,
-      });
-      showToast(type === "expense" ? "Expense added" : type === "income" ? "Income added" : "Transfer recorded");
+      if (prefill && prefill.id) {
+        updateTransaction(prefill.id, {
+          type,
+          tag: undefined,
+          amount: minorUnits,
+          categoryId: selectedCategoryId || categories[0]?.id || "general",
+          date,
+          note: description.trim() || undefined,
+          paymentMethod: paymentAccount,
+        });
+        showToast("Transaction updated");
+      } else {
+        addTransaction({
+          type,
+          tag: undefined,
+          amount: minorUnits,
+          categoryId: selectedCategoryId || categories[0]?.id || "general",
+          date,
+          note: description.trim() || undefined,
+          paymentMethod: paymentAccount,
+        });
+        showToast(type === "expense" ? "Expense added" : "Income added");
+      }
     }
 
     if (settings.hapticFeedback !== false && typeof navigator !== "undefined" && navigator.vibrate) {
@@ -311,7 +411,12 @@ export const AddPaymentModal: React.FC = () => {
     closeAddModal();
   };
 
-  const filteredCategories = categories.filter((c) => c.type === type || c.type === "both");
+  const filteredCategories = categories.filter((c) => {
+    if (type === "transfer") {
+      return c.id === "cat-transfer" || c.name.toLowerCase() === "transfer";
+    }
+    return (c.type === type || c.type === "both") && c.name.toLowerCase() !== "transfer";
+  });
 
   // Calendar Picker Helpers
   const monthNames = [
@@ -397,9 +502,19 @@ export const AddPaymentModal: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setType(tabType);
-                  const validCats = categories.filter((c) => c.type === tabType || c.type === "both");
-                  if (validCats.length > 0 && !validCats.some((c) => c.id === selectedCategoryId)) {
-                    setSelectedCategoryId(validCats[0].id);
+                  setShowCategoryMenu(false);
+                  if (tabType === "transfer") {
+                    setSelectedCategoryId(defaultTransferCat.id);
+                  } else {
+                    const validCats = categories.filter(
+                      (c) => (c.type === tabType || c.type === "both") && c.name.toLowerCase() !== "transfer"
+                    );
+                    if (
+                      validCats.length > 0 &&
+                      (!validCats.some((c) => c.id === selectedCategoryId) || selectedCategoryId === defaultTransferCat.id)
+                    ) {
+                      setSelectedCategoryId(validCats[0].id);
+                    }
                   }
                 }}
                 className={`flex-1 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer border text-center ${
@@ -548,26 +663,50 @@ export const AddPaymentModal: React.FC = () => {
           <div className="space-y-3">
             {/* Category Dropdown (Max 4 rows, scroll for additional) */}
             <div ref={categoryMenuRef} className="space-y-1">
-              <label className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider block px-1">
-                Category
-              </label>
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider block">
+                  Category
+                </label>
+                {type === "transfer" && (
+                  <span className="text-[10px] text-sky-400 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                    Set to Transfer
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
+                  if (type === "transfer") return;
                   setShowCategoryMenu(!showCategoryMenu);
                   setShowAccountMenu(false);
                 }}
-                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#181818] border border-[#262626] hover:border-neutral-700 active:scale-[0.99] transition cursor-pointer text-left"
+                disabled={type === "transfer"}
+                aria-disabled={type === "transfer"}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition text-left ${
+                  type === "transfer"
+                    ? "bg-[#181818] border-sky-500/30 cursor-default select-none"
+                    : "bg-[#181818] border-[#262626] hover:border-neutral-700 active:scale-[0.99] cursor-pointer"
+                }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <span className="text-lg">{selectedCategory.icon || "🍔"}</span>
+                  <span className="text-lg">{selectedCategory.icon || "🔄"}</span>
                   <span className="text-sm font-semibold text-[#F5F5F5] truncate">{selectedCategory.name}</span>
+                  {type === "transfer" && (
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30 rounded-full">
+                      Transfer
+                    </span>
+                  )}
                 </div>
-                <ChevronDown className={`w-4 h-4 text-[#71717A] transition-transform duration-200 ${showCategoryMenu ? "rotate-180 text-white" : ""}`} />
+                {type === "transfer" ? (
+                  <Check className="w-4 h-4 text-sky-400 shrink-0" />
+                ) : (
+                  <ChevronDown className={`w-4 h-4 text-[#71717A] transition-transform duration-200 ${showCategoryMenu ? "rotate-180 text-white" : ""}`} />
+                )}
               </button>
 
               {/* In-Flow Category List: Displays maximum 4 rows with vertical scroll */}
-              {showCategoryMenu && (
+              {showCategoryMenu && type !== "transfer" && (
                 <div className="mt-1.5 max-h-[172px] overflow-y-auto overscroll-contain bg-[#1A1A1A] border border-[#2E2E2E] rounded-xl p-1.5 space-y-1 animate-in fade-in duration-150">
                   {filteredCategories.map((cat) => {
                     const isSel = selectedCategoryId === cat.id;
@@ -651,6 +790,96 @@ export const AddPaymentModal: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Transfer to Input Field (Only for Transfer tab) */}
+          {type === "transfer" && (
+            <div ref={transferToRef} className="space-y-1 relative">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider block">
+                  Transfer to <span className="text-sky-400 font-normal lowercase">(auto-logged as lent)</span>
+                </label>
+                <span className="text-[10px] text-rose-400 font-semibold">*required</span>
+              </div>
+              <div className="bg-[#181818] border border-[#242424] focus-within:border-sky-500 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 transition">
+                <User className="w-4 h-4 text-sky-400 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Recipient name (e.g., Alex, Rahul)..."
+                  value={transferTo}
+                  onChange={(e) => {
+                    setTransferTo(e.target.value);
+                    if (error) setError("");
+                    setShowPersonSuggestions(true);
+                  }}
+                  onFocus={() => setShowPersonSuggestions(true)}
+                  className="w-full bg-transparent text-sm text-[#F5F5F5] outline-none placeholder-[#71717A]"
+                  maxLength={50}
+                  autoComplete="off"
+                />
+                {transferTo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTransferTo("");
+                      setShowPersonSuggestions(false);
+                    }}
+                    className="text-[#71717A] hover:text-[#F5F5F5] p-1 cursor-pointer"
+                    aria-label="Clear recipient name"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Suggestions dropdown from existing contacts */}
+              {showPersonSuggestions && people.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-30 max-h-[170px] overflow-y-auto overscroll-contain bg-[#1A1A1A] border border-[#2E2E2E] rounded-xl p-1.5 shadow-2xl space-y-1 animate-in fade-in duration-150">
+                  <div className="px-2 py-1 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                    Existing Contacts
+                  </div>
+                  {people
+                    .filter(
+                      (p) => !transferTo.trim() || p.name.toLowerCase().includes(transferTo.trim().toLowerCase())
+                    )
+                    .slice(0, 8)
+                    .map((p) => {
+                      const isMatch = transferTo.trim().toLowerCase() === p.name.toLowerCase();
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setTransferTo(p.name);
+                            setShowPersonSuggestions(false);
+                            if (error) setError("");
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer text-left ${
+                            isMatch
+                              ? "bg-[#282828] text-white font-semibold ring-1 ring-sky-500/40"
+                              : "text-[#D4D4D8] hover:bg-[#222222] hover:text-white"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 truncate">
+                            <div className="w-6 h-6 rounded-full bg-sky-950/70 text-sky-400 border border-sky-800/50 flex items-center justify-center font-bold text-[10px] shrink-0">
+                              {p.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-sm font-medium text-[#F5F5F5] truncate">{p.name}</span>
+                          </div>
+                          {isMatch && <Check className="w-4 h-4 text-sky-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  {people.filter(
+                    (p) => !transferTo.trim() || p.name.toLowerCase().includes(transferTo.trim().toLowerCase())
+                  ).length === 0 && (
+                    <div className="px-3 py-2 text-xs text-neutral-400">
+                      Press enter or save to add &quot;{transferTo.trim()}&quot; as a new contact
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 5. Description / Merchant Input Field */}
           <div>

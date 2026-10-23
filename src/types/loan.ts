@@ -4,6 +4,7 @@ export interface Repayment {
   id: string;
   amount: number; // Integer minor units
   date: string; // YYYY-MM-DD
+  paymentMethod?: string;
   note?: string;
 }
 

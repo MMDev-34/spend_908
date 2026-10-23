@@ -9,6 +9,7 @@ export interface Transaction {
   note?: string;
   paymentMethod?: string;
   isUnwanted?: boolean; // Flag for unwanted / impulse spend
+  tag?: string; // Optional tag, e.g. "transfer"
   createdAt: string;
   updatedAt: string;
 }
