@@ -93,13 +93,14 @@ export const NewTransactionView: React.FC<NewTransactionViewProps> = ({
       }
     }
 
-    addLoan({
+    const newLoan = addLoan({
       personId: targetPersonId,
       direction,
       amount,
       description: description.trim() || undefined,
       date: startDate || getToday(),
       dueDate: dueDate || undefined,
+      paymentMethod: paymentMethod.toUpperCase(),
     });
 
     const targetPerson = people.find((p) => p.id === targetPersonId);
@@ -110,6 +111,7 @@ export const NewTransactionView: React.FC<NewTransactionViewProps> = ({
       const transferCat = categories.find((c) => c.id === "cat-transfer" || c.name.toLowerCase() === "transfer");
       const defaultCat = transferCat || categories.find((c) => c.type === "expense" || c.type === "both");
       addTransaction({
+        id: `tx-loan-${newLoan.id}`,
         type: "expense",
         tag: "transfer",
         amount,
@@ -122,7 +124,34 @@ export const NewTransactionView: React.FC<NewTransactionViewProps> = ({
       });
       showToast(`Added lent record & logged expense for ${targetName}`);
     } else {
-      showToast(`Added borrowed record from ${targetName}`);
+      // When borrowing money, record as an income transaction in transaction history
+      const transferCat = categories.find((c) => c.id === "cat-transfer" || c.name.toLowerCase() === "transfer");
+      const incomeCat =
+        categories.find(
+          (c) =>
+            c.type === "income" &&
+            (c.id === "cat-other-income" ||
+              c.name.toLowerCase().includes("borrow") ||
+              c.name.toLowerCase().includes("loan") ||
+              c.name.toLowerCase().includes("debt"))
+        ) ||
+        transferCat ||
+        categories.find((c) => c.type === "income" || c.type === "both") ||
+        categories[0];
+
+      addTransaction({
+        id: `tx-loan-${newLoan.id}`,
+        type: "income",
+        tag: "transfer",
+        amount,
+        categoryId: incomeCat?.id || "cat-transfer",
+        date: startDate || getToday(),
+        note: description.trim()
+          ? `${description.trim()} (Borrowed from: ${targetName})`
+          : `Borrowed from ${targetName}`,
+        paymentMethod: paymentMethod || settings.defaultPaymentMethod || "upi",
+      });
+      showToast(`Added borrowed record & logged income from ${targetName}`);
     }
 
     onSuccess(targetPersonId);

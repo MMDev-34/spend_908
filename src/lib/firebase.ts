@@ -66,9 +66,14 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+export function logFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): FirestoreErrorInfo {
   const errMsg = error instanceof Error ? error.message : String(error);
-  const isPermissionIssue = errMsg.toLowerCase().includes("permission") || (error as any)?.code === "permission-denied";
+  const isPermissionIssue =
+    errMsg.toLowerCase().includes("permission") || (error as any)?.code === "permission-denied";
   if (isPermissionIssue) {
     try {
       useUIStore.getState().setFirestorePermissionError(true);
@@ -93,6 +98,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path,
   };
   console.warn("Firestore Error: ", JSON.stringify(errInfo));
+  return errInfo;
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo = logFirestoreError(error, operationType, path);
   throw new Error(JSON.stringify(errInfo));
 }
 

@@ -35,7 +35,7 @@ interface AppState extends SpendState {
   plannedExpenses: PlannedExpense[];
 
   // Transaction actions
-  addTransaction: (tx: Omit<Transaction, "id" | "createdAt" | "updatedAt">) => Transaction;
+  addTransaction: (tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> & { id?: string }) => Transaction;
   updateTransaction: (id: string, updates: Partial<Omit<Transaction, "id" | "createdAt">>) => void;
   deleteTransaction: (id: string) => void;
   restoreTransaction: (tx: Transaction) => void;
@@ -52,7 +52,7 @@ interface AppState extends SpendState {
   // People & Loan actions
   addPerson: (name: string) => Person;
   updatePerson: (id: string, name: string) => void;
-  deletePerson: (id: string) => boolean;
+  deletePerson: (id: string, cascadeLoans?: boolean) => boolean;
 
   addLoan: (loan: Omit<Loan, "id" | "repayments" | "createdAt" | "updatedAt">) => Loan;
   updateLoan: (id: string, updates: Partial<Omit<Loan, "id" | "repayments" | "createdAt">>) => void;
@@ -166,7 +166,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const newTx: Transaction = {
         ...txData,
         isUnwanted: txData.type === "expense" ? Boolean(txData.isUnwanted) : false,
-        id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: txData.id || `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: now,
         updatedAt: now,
       };
@@ -409,16 +409,33 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
 
-    deletePerson: (id) => {
-      const hasLoans = get().loans.some((l) => l.personId === id);
-      if (hasLoans) return false;
+    deletePerson: (id, cascadeLoans = false) => {
+      const associatedLoans = get().loans.filter((l) => l.personId === id);
+      if (associatedLoans.length > 0 && !cascadeLoans) return false;
+
+      const autoTxIds = new Set<string>();
+      if (cascadeLoans) {
+        associatedLoans.forEach((l) => {
+          l.repayments.forEach((r) => autoTxIds.add(`tx-settle-${r.id}`));
+          autoTxIds.add(`tx-loan-${l.id}`);
+        });
+      }
 
       syncAndSet((state) => ({
         people: state.people.filter((p) => p.id !== id),
+        loans: cascadeLoans ? state.loans.filter((l) => l.personId !== id) : state.loans,
+        transactions: cascadeLoans ? state.transactions.filter((t) => !autoTxIds.has(t.id)) : state.transactions,
       }));
 
       if (auth.currentUser) {
         deletePersonFromCloud(id);
+        if (cascadeLoans) {
+          associatedLoans.forEach((l) => {
+            deleteLoanFromCloud(l.id);
+            l.repayments.forEach((r) => deleteTransactionFromCloud(`tx-settle-${r.id}`).catch(() => {}));
+            deleteTransactionFromCloud(`tx-loan-${l.id}`).catch(() => {});
+          });
+        }
       }
       return true;
     },
@@ -450,6 +467,8 @@ export const useAppStore = create<AppState>((set, get) => {
     updateLoan: (id, updates) => {
       const now = new Date().toISOString();
       let updatedL: Loan | undefined;
+      let updatedTxToSync: Transaction | undefined;
+
       syncAndSet((state) => {
         const nextLoans = state.loans.map((l) => {
           if (l.id === id) {
@@ -458,20 +477,52 @@ export const useAppStore = create<AppState>((set, get) => {
           }
           return l;
         });
-        return { loans: nextLoans };
+
+        // Also sync origin transaction if amount, date, description, or paymentMethod changed
+        let nextTransactions = state.transactions;
+        const originTx = state.transactions.find((t) => t.id === `tx-loan-${id}`);
+        if (originTx) {
+          const person = state.people.find((p) => p.id === (updatedL?.personId || originTx.id));
+          const personName = person?.name || "Contact";
+          const newAmount = updates.amount !== undefined ? updates.amount : originTx.amount;
+          const newDate = updates.date !== undefined ? updates.date : originTx.date;
+          const newPaymentMethod = updates.paymentMethod !== undefined ? updates.paymentMethod.toLowerCase() : originTx.paymentMethod;
+          const newDesc = updates.description !== undefined ? updates.description : "";
+          const directionLabel = (updatedL?.direction || "borrowed") === "lent" ? "Lent to" : "Borrowed from";
+          const newNote = newDesc.trim() ? `${newDesc.trim()} (${directionLabel}: ${personName})` : `${directionLabel} ${personName}`;
+
+          updatedTxToSync = {
+            ...originTx,
+            amount: newAmount,
+            date: newDate,
+            paymentMethod: newPaymentMethod,
+            note: newNote,
+            updatedAt: now,
+          };
+          nextTransactions = state.transactions.map((t) => (t.id === originTx.id ? updatedTxToSync! : t));
+        }
+
+        return { loans: nextLoans, transactions: nextTransactions };
       });
 
-      if (auth.currentUser && updatedL) {
-        syncLoanToCloud(updatedL, auth.currentUser.uid).catch((err) => {
-          console.warn("Cloud sync deferred (Firestore permission issue):", err?.message || err);
-        });
+      if (auth.currentUser) {
+        if (updatedL) {
+          syncLoanToCloud(updatedL, auth.currentUser.uid).catch((err) => {
+            console.warn("Cloud sync deferred (Firestore permission issue):", err?.message || err);
+          });
+        }
+        if (updatedTxToSync) {
+          syncTransactionToCloud(updatedTxToSync, auth.currentUser.uid).catch(() => {});
+        }
       }
     },
 
     deleteLoan: (id) => {
+      const autoTxIds = new Set<string>();
       syncAndSet((state) => {
         const targetLoan = state.loans.find((l) => l.id === id);
-        const autoTxIds = new Set(targetLoan?.repayments.map((r) => `tx-settle-${r.id}`) || []);
+        targetLoan?.repayments.forEach((r) => autoTxIds.add(`tx-settle-${r.id}`));
+        autoTxIds.add(`tx-loan-${id}`);
         return {
           loans: state.loans.filter((l) => l.id !== id),
           transactions: state.transactions.filter((t) => !autoTxIds.has(t.id)),
@@ -480,6 +531,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
       if (auth.currentUser) {
         deleteLoanFromCloud(id);
+        autoTxIds.forEach((txId) => {
+          deleteTransactionFromCloud(txId).catch(() => {});
+        });
       }
     },
 

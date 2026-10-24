@@ -52,7 +52,6 @@ export const RecordRepaymentView: React.FC<RecordRepaymentViewProps> = ({
   const [amountStr, setAmountStr] = useState<string>("");
   const [date, setDate] = useState<string>(getToday());
   const [paymentMethod, setPaymentMethod] = useState<string>("upi");
-  const [note, setNote] = useState<string>("");
 
   useEffect(() => {
     if (remainingBalance > 0) {
@@ -86,7 +85,7 @@ export const RecordRepaymentView: React.FC<RecordRepaymentViewProps> = ({
     }
 
     const isFull = minorUnits === remainingBalance;
-    const repaymentNote = note.trim() || (isFull ? "Full settlement" : "Partial installment");
+    const repaymentNote = isFull ? "Full settlement" : "Partial installment";
 
     addRepayment(loan.id, {
       amount: minorUnits,
@@ -107,7 +106,7 @@ export const RecordRepaymentView: React.FC<RecordRepaymentViewProps> = ({
   const loanTitle = loan.description?.trim() || (isLent ? "Money Lent" : "Money Borrowed");
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200 max-w-xl mx-auto pb-14">
+    <div className="max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-2 pb-28 sm:pb-16 space-y-4 animate-in fade-in duration-200">
       {/* 1. Header with Back Button */}
       <div className="flex items-center gap-3 pb-2 border-b border-[#1F2937]">
         <button
@@ -275,20 +274,6 @@ export const RecordRepaymentView: React.FC<RecordRepaymentViewProps> = ({
               required
             />
           </div>
-        </div>
-
-        {/* Notes (Optional) */}
-        <div>
-          <label className="block text-xs font-semibold text-[#8E8E93] uppercase tracking-wider mb-2">
-            Notes (optional)
-          </label>
-          <input
-            type="text"
-            placeholder="Add a note..."
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="w-full bg-[#0F1720] border border-[#1E293B] focus:border-emerald-500 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#F5F5F5] outline-none placeholder-[#71717A]"
-          />
         </div>
 
         {/* Primary Save Button (Screens 4 & 6) */}

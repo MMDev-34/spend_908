@@ -3,7 +3,7 @@ import { Loan } from "@/types/loan";
 import { Person } from "@/types/person";
 import { Settings } from "@/types/settings";
 import { formatMoney } from "@/utils/currency";
-import { formatShortDate, getToday } from "@/utils/dates";
+import { getToday } from "@/utils/dates";
 import { getAvatarColors, getInitials } from "@/utils/avatarUtils";
 import { ChevronRight } from "lucide-react";
 
@@ -25,6 +25,17 @@ interface ContactRowProps {
   onOpenDetails: (person: Person) => void;
 }
 
+function formatLoanDate(dateStr?: string): string {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length < 3 || parts.some(isNaN)) return dateStr;
+  const [y, m, d] = parts;
+  const dateObj = new Date(y, m - 1, d);
+  if (isNaN(dateObj.getTime())) return dateStr;
+  const month = dateObj.toLocaleDateString("en-US", { month: "short" }).toLowerCase();
+  return `${d} ${month} ${y}`;
+}
+
 export const ContactRow: React.FC<ContactRowProps> = ({
   ledger,
   settings,
@@ -35,40 +46,34 @@ export const ContactRow: React.FC<ContactRowProps> = ({
   const initials = getInitials(person.name);
   const todayStr = getToday();
 
-  // Find most pressing due date among unpaid loans
+  // Find unpaid loans to check overdue and active status
   const unpaidLoans = loans.filter((l) => {
     const repaid = l.repayments.reduce((sum, r) => sum + r.amount, 0);
     return l.amount - repaid > 0;
   });
 
-  const overdueLoan = unpaidLoans.find((l) => l.dueDate && l.dueDate < todayStr);
-  const nextDueLoan = unpaidLoans
-    .filter((l) => l.dueDate && l.dueDate >= todayStr)
-    .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""))[0];
+  const isOverdue = !isSettled && unpaidLoans.some((l) => l.dueDate && l.dueDate < todayStr);
 
-  // Derive Subtitle (e.g. "Lent · Due Oct 28", "Borrowed · Due Oct 25", "Lent · Partially repaid")
-  let directionLabel = "Lent";
+  // Pick the most relevant loan (latest active loan, or latest loan overall)
+  const relevantLoans = unpaidLoans.length > 0 ? unpaidLoans : loans;
+  const primaryLoan = [...relevantLoans].sort((a, b) => 
+    (b.date || "").localeCompare(a.date || "")
+  )[0];
+
+  const formattedDate = primaryLoan?.date ? formatLoanDate(primaryLoan.date) : "";
+
+  // Format Status & Due Subtitle: e.g. "borrow: 2 oct 2026" or "lent: 14 oct 2026"
+  let subtitle = "";
   if (isSettled) {
-    directionLabel = "Settled";
+    subtitle = formattedDate ? `settled: ${formattedDate}` : "settled";
   } else if (netRemaining < 0) {
-    directionLabel = "Borrowed";
-  }
-
-  let statusLabel = "";
-  if (isSettled) {
-    statusLabel = "All cleared";
-  } else if (overdueLoan && overdueLoan.dueDate) {
-    statusLabel = `Overdue ${formatShortDate(overdueLoan.dueDate)}`;
-  } else if (nextDueLoan && nextDueLoan.dueDate) {
-    statusLabel = `Due ${formatShortDate(nextDueLoan.dueDate)}`;
-  } else if (totalRepaid > 0) {
-    statusLabel = "Partially repaid";
-  } else if (loans.length > 1) {
-    statusLabel = `${loans.length} records`;
-  } else if (loans[0]?.date) {
-    statusLabel = formatShortDate(loans[0].date);
+    subtitle = formattedDate ? `borrow: ${formattedDate}` : "borrow";
+  } else if (netRemaining > 0) {
+    subtitle = formattedDate ? `lent: ${formattedDate}` : "lent";
+  } else if (primaryLoan?.direction === "borrowed") {
+    subtitle = formattedDate ? `borrow: ${formattedDate}` : "borrow";
   } else {
-    statusLabel = "Active";
+    subtitle = formattedDate ? `lent: ${formattedDate}` : "lent";
   }
 
   // Derive Right Subtext ("To receive", "To repay", "Remaining", "Settled")
@@ -81,14 +86,12 @@ export const ContactRow: React.FC<ContactRowProps> = ({
     amountSubtext = "To repay";
   }
 
-  const isOverdue = !!overdueLoan && !isSettled;
-
   return (
     <div
       onClick={() => onOpenDetails(person)}
       className="group flex items-center justify-between p-3.5 sm:p-4 hover:bg-[#15202E] transition-colors cursor-pointer select-none border-b border-[#1A2332] last:border-b-0"
     >
-      {/* Left: Avatar + Name + Direction / Due status */}
+      {/* Left: Avatar + Name + Status & Date Subtitle */}
       <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1 pr-3">
         {/* Soft pastel circular avatar */}
         <div
@@ -103,10 +106,9 @@ export const ContactRow: React.FC<ContactRowProps> = ({
             {person.name}
           </div>
 
-          <div className="text-xs text-[#8E8E93] truncate mt-0.5 flex items-center gap-1">
-            <span>{directionLabel} · </span>
-            <span className={isOverdue ? "text-rose-400 font-semibold" : ""}>
-              {statusLabel}
+          <div className="text-xs text-[#8E8E93] truncate mt-0.5">
+            <span className={isOverdue ? "text-rose-400 font-medium" : ""}>
+              {subtitle}
             </span>
           </div>
         </div>

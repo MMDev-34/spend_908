@@ -16,11 +16,10 @@ import {
   X, 
   ArrowUp, 
   Search,
-  Users,
   SlidersHorizontal
 } from "lucide-react";
 
-type FilterTab = "all" | "lent" | "borrowed" | "overdue" | "settled";
+type FilterTab = "all" | "lent" | "borrowed" | "settled";
 
 export type BorrowLendView = 
   | { type: "directory" }
@@ -113,13 +112,6 @@ export const BorrowLendPage: React.FC = () => {
       if (activeTab === "settled" && !ledger.isSettled) {
         return false;
       }
-      if (activeTab === "overdue") {
-        const hasOverdue = ledger.loans.some((l) => {
-          const repaid = l.repayments.reduce((sum, r) => sum + r.amount, 0);
-          return l.dueDate && l.dueDate < todayStr && l.amount - repaid > 0;
-        });
-        if (!hasOverdue) return false;
-      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -136,25 +128,17 @@ export const BorrowLendPage: React.FC = () => {
       if (!a.isSettled && b.isSettled) return -1;
       return Math.abs(b.netRemaining) - Math.abs(a.netRemaining);
     });
-  }, [contactLedgers, activeTab, searchQuery, todayStr]);
+  }, [contactLedgers, activeTab, searchQuery]);
 
   // Tab counts
   const tabCounts = useMemo(() => {
-    const overdueCount = contactLedgers.filter((l) => {
-      return l.loans.some((loan) => {
-        const repaid = loan.repayments.reduce((sum, r) => sum + r.amount, 0);
-        return loan.dueDate && loan.dueDate < todayStr && loan.amount - repaid > 0;
-      });
-    }).length;
-
     return {
       all: contactLedgers.length,
       lent: peopleOweYouCount,
       borrowed: peopleToRepayCount,
-      overdue: overdueCount,
       settled: contactLedgers.filter((l) => l.isSettled).length,
     };
-  }, [contactLedgers, peopleOweYouCount, peopleToRepayCount, todayStr]);
+  }, [contactLedgers, peopleOweYouCount, peopleToRepayCount]);
 
   // -------------------------------------------------------------
   // VIEW ROUTER: Dedicated Page Architecture
@@ -291,28 +275,6 @@ export const BorrowLendPage: React.FC = () => {
   // 5. Screen 1: Main Borrow & Lend Overview / Directory View
   return (
     <div className="space-y-4 animate-in fade-in duration-200 max-w-6xl mx-auto pb-14">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-1">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#F5F5F5]">
-            Borrow &amp; Lend
-          </h1>
-          <p className="text-xs sm:text-sm text-[#8E8E93] mt-0.5">
-            Track money between you and others
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setActiveView({ type: "new_transaction", returnTo: "directory" })}
-          className="w-10 h-10 rounded-full bg-[#121820] hover:bg-[#1E293B] border border-[#1F2937] flex items-center justify-center text-[#F5F5F5] transition cursor-pointer shadow-sm active:scale-95"
-          title="Track new transaction"
-          aria-label="Track new transaction"
-        >
-          <Users className="w-5 h-5" />
-        </button>
-      </div>
-
       {/* Summary Cards: To receive & To repay (Screen 1) */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 select-none">
         {/* Card 1: To receive (Dark green card matching Screen 1) */}
@@ -411,9 +373,9 @@ export const BorrowLendPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Filter Pills (Screen 1: All | Lent | Borrowed | Overdue | Settled) */}
+        {/* Filter Pills (Screen 1: All | Lent | Borrowed | Settled) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {(["all", "lent", "borrowed", "overdue", "settled"] as const).map((tab) => {
+          {(["all", "lent", "borrowed", "settled"] as const).map((tab) => {
             const label =
               tab === "all"
                 ? "All"
@@ -421,8 +383,6 @@ export const BorrowLendPage: React.FC = () => {
                 ? "Lent"
                 : tab === "borrowed"
                 ? "Borrowed"
-                : tab === "overdue"
-                ? "Overdue"
                 : "Settled";
             const count = tabCounts[tab];
             const isSelected = activeTab === tab;
